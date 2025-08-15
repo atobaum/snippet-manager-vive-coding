@@ -4,8 +4,12 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"os"
 	"strings"
 
 	"github.com/atobaum/snippet-manager/internal/snippet"
@@ -18,10 +22,11 @@ var staticFiles embed.FS
 type Server struct {
 	snippetService *snippet.Service
 	port           int
+	devMode        bool
 }
 
 // NewServer creates a new web server
-func NewServer(port int) (*Server, error) {
+func NewServer(port int, devMode bool) (*Server, error) {
 	svc, err := snippet.NewService()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create snippet service: %w", err)
@@ -30,6 +35,7 @@ func NewServer(port int) (*Server, error) {
 	return &Server{
 		snippetService: svc,
 		port:           port,
+		devMode:        devMode,
 	}, nil
 }
 
@@ -42,18 +48,96 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/snippets", s.handleSnippets)
 	mux.HandleFunc("/api/snippets/", s.handleSnippet)
 
-	// Static files
+	// Static files handling
+	if s.devMode {
+		// In dev mode, proxy to Svelte dev server
+		s.setupDevProxy(mux)
+	} else {
+		// In production mode, serve embedded files
+		s.setupStaticFiles(mux)
+	}
+
+	fmt.Printf("🚀 Server starting on http://localhost:%d\n", s.port)
+	if s.devMode {
+		fmt.Println("📝 Development mode: Make sure Svelte dev server is running on port 5173")
+	}
+	return http.ListenAndServe(fmt.Sprintf(":%d", s.port), s.corsMiddleware(mux))
+}
+
+// setupDevProxy sets up proxy to Svelte dev server for development
+func (s *Server) setupDevProxy(mux *http.ServeMux) {
+	target, err := url.Parse("http://localhost:5173")
+	if err != nil {
+		fmt.Printf("Error parsing dev server URL: %v\n", err)
+		s.setupStaticFiles(mux)
+		return
+	}
+
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Skip API routes
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			http.NotFound(w, r)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	})
+}
+
+// setupStaticFiles sets up static file serving for production
+func (s *Server) setupStaticFiles(mux *http.ServeMux) {
 	staticFS, err := fs.Sub(staticFiles, "dist")
 	if err != nil {
 		// If dist folder doesn't exist, serve a simple message
 		mux.HandleFunc("/", s.handleFallback)
-	} else {
-		fileServer := http.FileServer(http.FS(staticFS))
-		mux.Handle("/", fileServer)
+		return
 	}
 
-	fmt.Printf("🚀 Server starting on http://localhost:%d\n", s.port)
-	return http.ListenAndServe(fmt.Sprintf(":%d", s.port), s.corsMiddleware(mux))
+	// Serve static files with SPA routing support
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Skip API routes
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			http.NotFound(w, r)
+			return
+		}
+
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if path == "" {
+			path = "index.html"
+		}
+
+		// Try to open the requested file
+		file, err := staticFS.Open(path)
+		if err != nil {
+			// If file not found and not a static asset, serve index.html for SPA routing
+			if os.IsNotExist(err) && !strings.Contains(path, ".") {
+				indexFile, err := staticFS.Open("index.html")
+				if err != nil {
+					http.Error(w, "index.html not found", http.StatusNotFound)
+					return
+				}
+				defer indexFile.Close()
+
+				w.Header().Set("Content-Type", "text/html")
+				io.Copy(w, indexFile)
+				return
+			}
+			http.Error(w, "File not found", http.StatusNotFound)
+			return
+		}
+		defer file.Close()
+
+		// Set appropriate content type
+		if strings.HasSuffix(path, ".css") {
+			w.Header().Set("Content-Type", "text/css")
+		} else if strings.HasSuffix(path, ".js") {
+			w.Header().Set("Content-Type", "application/javascript")
+		} else if strings.HasSuffix(path, ".html") {
+			w.Header().Set("Content-Type", "text/html")
+		}
+
+		io.Copy(w, file)
+	})
 }
 
 // corsMiddleware adds CORS headers

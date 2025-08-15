@@ -6,13 +6,12 @@ echo "🚀 Building Snippet Manager..."
 echo "📦 Building frontend..."
 cd web || exit
 yarn build
-cp -r .svelte-kit/output/client dist
 cd ..
 
-# Copy dist to server directory for embed
+# Copy build to server directory for embed
 echo "📂 Copying static files..."
 rm -rf internal/server/dist
-cp -r web/dist internal/server/
+cp -r web/build internal/server/dist
 
 # Build Go backend
 echo "🔨 Building backend..."
