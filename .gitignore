@@ -1,0 +1,29 @@
+# Binary
+sni
+
+# Go
+*.mod
+go.sum
+
+# Config & Data
+.sni/
+snippets.yaml
+
+# Web
+web/node_modules/
+web/.svelte-kit/
+web/dist/
+web/yarn.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+internal/server/dist/
