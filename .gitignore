@@ -1,9 +1,5 @@
 # Binary
-sni
-
-# Go
-*.mod
-go.sum
+./sni
 
 # Config & Data
 .sni/
