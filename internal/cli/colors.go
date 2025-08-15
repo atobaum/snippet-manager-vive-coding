@@ -42,6 +42,14 @@ func ColorizeDescription(desc string) string {
 	return "   " + DescColor.Sprintf("Description: %s", desc)
 }
 
+// ColorizeLanguage formats language with color
+func ColorizeLanguage(language string) string {
+	if language == "" {
+		return ""
+	}
+	return "   " + InfoColor.Sprintf("Language: %s", language)
+}
+
 // ColorizeTags formats tags with color
 func ColorizeTags(tags []string) string {
 	if len(tags) == 0 {

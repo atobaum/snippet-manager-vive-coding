@@ -9,7 +9,6 @@ snippets.yaml
 web/node_modules/
 web/.svelte-kit/
 web/dist/
-web/yarn.lock
 
 # IDE
 .vscode/

@@ -8,6 +8,7 @@ import (
 type Snippet struct {
 	Name        string    `yaml:"name,omitempty" json:"name"`
 	Description string    `yaml:"description" json:"description"`
+	Language    string    `yaml:"language,omitempty" json:"language"`
 	Tags        []string  `yaml:"tags" json:"tags"`
 	Command     string    `yaml:"command" json:"command"`
 	CreatedAt   time.Time `yaml:"created_at,omitempty" json:"created_at"`
@@ -20,11 +21,12 @@ type SnippetsFile struct {
 }
 
 // NewSnippet creates a new snippet with the given parameters
-func NewSnippet(name, description, command string, tags []string) Snippet {
+func NewSnippet(name, description, command, language string, tags []string) Snippet {
 	now := time.Now()
 	return Snippet{
 		Name:        name,
 		Description: description,
+		Language:    language,
 		Tags:        tags,
 		Command:     command,
 		CreatedAt:   now,
@@ -33,12 +35,15 @@ func NewSnippet(name, description, command string, tags []string) Snippet {
 }
 
 // Update updates the snippet with new values
-func (s *Snippet) Update(description, command string, tags []string) {
+func (s *Snippet) Update(description, command, language string, tags []string) {
 	if description != "" {
 		s.Description = description
 	}
 	if command != "" {
 		s.Command = command
+	}
+	if language != "" {
+		s.Language = language
 	}
 	if tags != nil {
 		s.Tags = tags

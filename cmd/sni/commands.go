@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/atobaum/snippet-manager/internal/cli"
@@ -34,6 +35,10 @@ var newCmd = &cobra.Command{
 		description, _ := reader.ReadString('\n')
 		description = strings.TrimSpace(description)
 
+		fmt.Print("Language (e.g., bash, go, python, javascript): ")
+		language, _ := reader.ReadString('\n')
+		language = strings.TrimSpace(language)
+
 		fmt.Print("Tags (comma separated): ")
 		tagsInput, _ := reader.ReadString('\n')
 		tagsInput = strings.TrimSpace(tagsInput)
@@ -57,7 +62,7 @@ var newCmd = &cobra.Command{
 		command := strings.Join(commandLines, "")
 		command = strings.TrimSpace(command)
 
-		if err := svc.CreateSnippet(name, description, command, tags); err != nil {
+		if err := svc.CreateSnippet(name, description, command, language, tags); err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating snippet: %v\n", err)
 			return
 		}
@@ -95,6 +100,9 @@ var listCmd = &cobra.Command{
 			fmt.Println(cli.ColorizeSnippetName(s.Name))
 			if desc := cli.ColorizeDescription(s.Description); desc != "" {
 				fmt.Println(desc)
+			}
+			if lang := cli.ColorizeLanguage(s.Language); lang != "" {
+				fmt.Println(lang)
 			}
 			if tags := cli.ColorizeTags(s.Tags); tags != "" {
 				fmt.Println(tags)
@@ -136,6 +144,9 @@ var searchCmd = &cobra.Command{
 			fmt.Println(cli.ColorizeSnippetName(s.Name))
 			if desc := cli.ColorizeDescription(s.Description); desc != "" {
 				fmt.Println(desc)
+			}
+			if lang := cli.ColorizeLanguage(s.Language); lang != "" {
+				fmt.Println(lang)
 			}
 			if tags := cli.ColorizeTags(s.Tags); tags != "" {
 				fmt.Println(tags)
@@ -199,6 +210,13 @@ var editCmd = &cobra.Command{
 			description = existing.Description
 		}
 
+		fmt.Printf("Language [%s]: ", existing.Language)
+		language, _ := reader.ReadString('\n')
+		language = strings.TrimSpace(language)
+		if language == "" {
+			language = existing.Language
+		}
+
 		fmt.Printf("Tags [%s]: ", strings.Join(existing.Tags, ", "))
 		tagsInput, _ := reader.ReadString('\n')
 		tagsInput = strings.TrimSpace(tagsInput)
@@ -231,7 +249,7 @@ var editCmd = &cobra.Command{
 			command = existing.Command
 		}
 
-		if err := svc.UpdateSnippet(name, description, command, tags); err != nil {
+		if err := svc.UpdateSnippet(name, description, command, language, tags); err != nil {
 			fmt.Fprintf(os.Stderr, "Error updating snippet: %v\n", err)
 			return
 		}
@@ -344,33 +362,20 @@ var execCmd = &cobra.Command{
 			return
 		}
 
-		// Ask for confirmation
-		fmt.Printf("\n%s\n", cli.InfoColor.Sprintf("🚀 Execute: %s", selectedSnippet.Name))
-		fmt.Printf("%s\n", cli.CommandColor.Sprintf("Command: %s", selectedSnippet.Command))
-		fmt.Print("Continue? (y/N): ")
-
-		reader := bufio.NewReader(os.Stdin)
-		confirmation, _ := reader.ReadString('\n')
-		confirmation = strings.TrimSpace(strings.ToLower(confirmation))
-
-		if confirmation != "y" && confirmation != "yes" {
-			fmt.Println(cli.ColorizeWarning("Execution cancelled."))
-			return
+		// Copy to clipboard and show info
+		fmt.Printf("\n%s\n", cli.InfoColor.Sprintf("📋 Selected: %s", selectedSnippet.Name))
+		if selectedSnippet.Description != "" {
+			fmt.Printf("%s\n", cli.ColorizeDescription(selectedSnippet.Description))
 		}
+		fmt.Printf("%s\n", cli.CommandColor.Sprintf("Command: %s", selectedSnippet.Command))
 
-		// Execute the command
-		fmt.Printf("\n%s\n", cli.HeaderColor.Sprintf("⚡ Executing: %s", selectedSnippet.Name))
-		fmt.Println("---")
-
-		shellCmd := exec.Command("sh", "-c", selectedSnippet.Command)
-		shellCmd.Stdout = os.Stdout
-		shellCmd.Stderr = os.Stderr
-		shellCmd.Stdin = os.Stdin
-
-		if err := shellCmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "\n%s\n", cli.ColorizeError(fmt.Sprintf("Command failed: %v", err)))
+		// Try to copy to clipboard
+		err = copyToClipboard(selectedSnippet.Command)
+		if err != nil {
+			fmt.Printf("\n%s\n", cli.ColorizeWarning("Could not copy to clipboard. Here's the command:"))
+			fmt.Println(selectedSnippet.Command)
 		} else {
-			fmt.Printf("\n%s\n", cli.ColorizeSuccess("Command completed successfully!"))
+			fmt.Printf("\n%s\n", cli.ColorizeSuccess("✅ Command copied to clipboard! Paste it in your terminal."))
 		}
 	},
 }
@@ -415,6 +420,31 @@ func getConfigInfo() string {
 		return "~/.config/sni (fallback)"
 	}
 	return workDir + "/.sni (default)"
+}
+
+func copyToClipboard(text string) error {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	case "linux":
+		// Try xclip first, then xsel
+		if _, err := exec.LookPath("xclip"); err == nil {
+			cmd = exec.Command("xclip", "-selection", "clipboard")
+		} else if _, err := exec.LookPath("xsel"); err == nil {
+			cmd = exec.Command("xsel", "--clipboard", "--input")
+		} else {
+			return fmt.Errorf("no clipboard utility found (install xclip or xsel)")
+		}
+	case "windows":
+		cmd = exec.Command("clip")
+	default:
+		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+
+	cmd.Stdin = strings.NewReader(text)
+	return cmd.Run()
 }
 
 func init() {

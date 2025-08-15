@@ -208,6 +208,7 @@ func (s *Server) createSnippet(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name        string   `json:"name"`
 		Description string   `json:"description"`
+		Language    string   `json:"language"`
 		Command     string   `json:"command"`
 		Tags        []string `json:"tags"`
 	}
@@ -222,7 +223,7 @@ func (s *Server) createSnippet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.snippetService.CreateSnippet(req.Name, req.Description, req.Command, req.Tags)
+	err := s.snippetService.CreateSnippet(req.Name, req.Description, req.Command, req.Language, req.Tags)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -248,6 +249,7 @@ func (s *Server) getSnippet(w http.ResponseWriter, r *http.Request, name string)
 func (s *Server) updateSnippet(w http.ResponseWriter, r *http.Request, name string) {
 	var req struct {
 		Description string   `json:"description"`
+		Language    string   `json:"language"`
 		Command     string   `json:"command"`
 		Tags        []string `json:"tags"`
 	}
@@ -257,7 +259,7 @@ func (s *Server) updateSnippet(w http.ResponseWriter, r *http.Request, name stri
 		return
 	}
 
-	err := s.snippetService.UpdateSnippet(name, req.Description, req.Command, req.Tags)
+	err := s.snippetService.UpdateSnippet(name, req.Description, req.Command, req.Language, req.Tags)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

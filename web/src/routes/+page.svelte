@@ -1,9 +1,19 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import hljs from 'highlight.js';
+	import 'highlight.js/styles/github.css';
 	
+	import Header from '$lib/components/Header.svelte';
+	import SearchBar from '$lib/components/SearchBar.svelte';
+	import SnippetForm from '$lib/components/SnippetForm.svelte';
+	import EditForm from '$lib/components/EditForm.svelte';
+	import SnippetCard from '$lib/components/SnippetCard.svelte';
+	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
+
 	interface Snippet {
 		name: string;
 		description: string;
+		language: string;
 		tags: string[];
 		command: string;
 		created_at?: string;
@@ -14,16 +24,36 @@
 	let loading = true;
 	let searchTerm = '';
 	let showCreateForm = false;
+	let editingSnippet: Snippet | null = null;
+	let editSnippet = {
+		name: '',
+		description: '',
+		language: '',
+		command: '',
+		tags: ''
+	};
 	let newSnippet = {
 		name: '',
 		description: '',
+		language: '',
 		command: '',
 		tags: ''
 	};
 
 	onMount(async () => {
 		await loadSnippets();
+		// Initialize syntax highlighting after snippets are loaded
+		setTimeout(() => {
+			hljs.highlightAll();
+		}, 100);
 	});
+	
+	// Re-highlight when snippets change
+	$: if (snippets.length > 0) {
+		setTimeout(() => {
+			hljs.highlightAll();
+		}, 100);
+	}
 
 	async function loadSnippets() {
 		try {
@@ -47,13 +77,14 @@
 				body: JSON.stringify({
 					name: newSnippet.name,
 					description: newSnippet.description,
+					language: newSnippet.language,
 					command: newSnippet.command,
 					tags: tags
 				})
 			});
 
 			if (response.ok) {
-				newSnippet = { name: '', description: '', command: '', tags: '' };
+				newSnippet = { name: '', description: '', language: '', command: '', tags: '' };
 				showCreateForm = false;
 				await loadSnippets();
 			} else {
@@ -87,6 +118,73 @@
 		alert('Copied to clipboard!');
 	}
 
+	function startEditSnippet(snippet: Snippet) {
+		editingSnippet = snippet;
+		editSnippet = {
+			name: snippet.name,
+			description: snippet.description,
+			language: snippet.language,
+			command: snippet.command,
+			tags: snippet.tags.join(', ')
+		};
+		showCreateForm = false;
+	}
+
+	function cancelEdit() {
+		editingSnippet = null;
+		editSnippet = {
+			name: '',
+			description: '',
+			language: '',
+			command: '',
+			tags: ''
+		};
+	}
+
+	async function updateSnippet() {
+		if (!editingSnippet) return;
+		
+		try {
+			const tags = editSnippet.tags.split(',').map(tag => tag.trim()).filter(tag => tag !== '');
+			const response = await fetch(`/api/snippets/${editingSnippet.name}`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					description: editSnippet.description,
+					language: editSnippet.language,
+					command: editSnippet.command,
+					tags: tags
+				})
+			});
+
+			if (response.ok) {
+				cancelEdit();
+				await loadSnippets();
+				// Re-highlight after update
+				setTimeout(() => {
+					hljs.highlightAll();
+				}, 100);
+			} else {
+				alert('Failed to update snippet');
+			}
+		} catch (error) {
+			console.error('Failed to update snippet:', error);
+		}
+	}
+
+	function handleToggleCreateForm() {
+		showCreateForm = !showCreateForm;
+		if (showCreateForm) {
+			cancelEdit();
+		}
+	}
+
+	function handleCreateFormCancel() {
+		showCreateForm = false;
+	}
+
 	$: filteredSnippets = snippets.filter(snippet =>
 		snippet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
 		snippet.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -94,147 +192,52 @@
 	);
 </script>
 
-<div class="container mx-auto px-4 py-8 max-w-6xl">
-	<header class="mb-8">
-		<h1 class="text-4xl font-bold text-gray-800 mb-4">📝 Snippet Manager</h1>
-		<p class="text-gray-600">Manage your code snippets efficiently</p>
-	</header>
+<div class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50">
+	<div class="container mx-auto px-4 py-8 max-w-7xl">
+		<Header />
 
-	<!-- Search and Create Button -->
-	<div class="flex flex-col sm:flex-row gap-4 mb-6">
-		<div class="flex-1">
-			<input
-				type="text"
-				bind:value={searchTerm}
-				placeholder="Search snippets..."
-				class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+		<SearchBar 
+			bind:searchTerm={searchTerm}
+			bind:showCreateForm={showCreateForm}
+			onToggleCreateForm={handleToggleCreateForm}
+		/>
+
+		{#if showCreateForm}
+			<SnippetForm 
+				bind:newSnippet={newSnippet}
+				onSubmit={createSnippet}
+				onCancel={handleCreateFormCancel}
 			/>
-		</div>
-		<button
-			on:click={() => showCreateForm = !showCreateForm}
-			class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-		>
-			{showCreateForm ? 'Cancel' : 'Create Snippet'}
-		</button>
+		{/if}
+
+		{#if editingSnippet}
+			<EditForm 
+				bind:editingSnippet={editingSnippet}
+				bind:editSnippet={editSnippet}
+				onSubmit={updateSnippet}
+				onCancel={cancelEdit}
+			/>
+		{/if}
+
+		{#if loading}
+			<LoadingSpinner message="Loading snippets..." />
+		{:else if filteredSnippets.length === 0}
+			<div class="text-center py-8">
+				<p class="text-gray-500 text-lg">
+					{searchTerm ? 'No snippets found matching your search.' : 'No snippets yet. Create your first one!'}
+				</p>
+			</div>
+		{:else}
+			<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+				{#each filteredSnippets as snippet}
+					<SnippetCard 
+						{snippet}
+						onDelete={deleteSnippet}
+						onEdit={startEditSnippet}
+						onCopy={copyToClipboard}
+					/>
+				{/each}
+			</div>
+		{/if}
 	</div>
-
-	<!-- Create Form -->
-	{#if showCreateForm}
-		<div class="bg-white p-6 rounded-lg shadow-md mb-6 border">
-			<h2 class="text-xl font-semibold mb-4">Create New Snippet</h2>
-			<form on:submit|preventDefault={createSnippet} class="space-y-4">
-				<div>
-					<label for="snippet-name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-					<input
-						id="snippet-name"
-						type="text"
-						bind:value={newSnippet.name}
-						required
-						class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-					/>
-				</div>
-				<div>
-					<label for="snippet-description" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-					<input
-						id="snippet-description"
-						type="text"
-						bind:value={newSnippet.description}
-						class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-					/>
-				</div>
-				<div>
-					<label for="snippet-tags" class="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
-					<input
-						id="snippet-tags"
-						type="text"
-						bind:value={newSnippet.tags}
-						placeholder="javascript, utility, function"
-						class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-					/>
-				</div>
-				<div>
-					<label for="snippet-command" class="block text-sm font-medium text-gray-700 mb-1">Command/Code</label>
-					<textarea
-						id="snippet-command"
-						bind:value={newSnippet.command}
-						rows="6"
-						required
-						class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
-					></textarea>
-				</div>
-				<div class="flex gap-2">
-					<button
-						type="submit"
-						class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-					>
-						Create
-					</button>
-					<button
-						type="button"
-						on:click={() => showCreateForm = false}
-						class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
-					>
-						Cancel
-					</button>
-				</div>
-			</form>
-		</div>
-	{/if}
-
-	<!-- Loading State -->
-	{#if loading}
-		<div class="text-center py-8">
-			<div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-			<p class="mt-2 text-gray-600">Loading snippets...</p>
-		</div>
-	{:else if filteredSnippets.length === 0}
-		<div class="text-center py-8">
-			<p class="text-gray-500 text-lg">
-				{searchTerm ? 'No snippets found matching your search.' : 'No snippets yet. Create your first one!'}
-			</p>
-		</div>
-	{:else}
-		<!-- Snippets Grid -->
-		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-			{#each filteredSnippets as snippet}
-				<div class="bg-white rounded-lg shadow-md border hover:shadow-lg transition-shadow">
-					<div class="p-4">
-						<div class="flex justify-between items-start mb-2">
-							<h3 class="font-semibold text-gray-800 truncate">{snippet.name}</h3>
-							<button
-								on:click={() => deleteSnippet(snippet.name)}
-								class="text-red-500 hover:text-red-700 ml-2 flex-shrink-0"
-								title="Delete snippet"
-							>
-								🗑️
-							</button>
-						</div>
-						
-						{#if snippet.description}
-							<p class="text-gray-600 text-sm mb-3">{snippet.description}</p>
-						{/if}
-						
-						{#if snippet.tags.length > 0}
-							<div class="flex flex-wrap gap-1 mb-3">
-								{#each snippet.tags as tag}
-									<span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">{tag}</span>
-								{/each}
-							</div>
-						{/if}
-						
-						<div class="bg-gray-50 rounded p-3 mb-3">
-							<pre class="text-sm text-gray-800 whitespace-pre-wrap overflow-x-auto max-h-32 overflow-y-auto">{snippet.command}</pre>
-						</div>
-						
-						<button
-							on:click={() => copyToClipboard(snippet.command)}
-							class="w-full px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
-						>
-							📋 Copy to Clipboard
-						</button>
-					</div>
-				</div>
-			{/each}
-		</div>
-	{/if}
 </div>

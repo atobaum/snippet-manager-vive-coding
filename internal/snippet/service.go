@@ -73,7 +73,7 @@ func (s *Service) SaveSnippets(snippetsFile *SnippetsFile) error {
 }
 
 // CreateSnippet creates a new snippet
-func (s *Service) CreateSnippet(name, description, command string, tags []string) error {
+func (s *Service) CreateSnippet(name, description, command, language string, tags []string) error {
 	snippetsFile, err := s.LoadSnippets()
 	if err != nil {
 		return err
@@ -83,7 +83,7 @@ func (s *Service) CreateSnippet(name, description, command string, tags []string
 		return fmt.Errorf("snippet '%s' already exists", name)
 	}
 
-	snippet := NewSnippet(name, description, command, tags)
+	snippet := NewSnippet(name, description, command, language, tags)
 	snippetsFile.Snippets[name] = snippet
 
 	return s.SaveSnippets(snippetsFile)
@@ -105,7 +105,7 @@ func (s *Service) GetSnippet(name string) (*Snippet, error) {
 }
 
 // UpdateSnippet updates an existing snippet
-func (s *Service) UpdateSnippet(name, description, command string, tags []string) error {
+func (s *Service) UpdateSnippet(name, description, command, language string, tags []string) error {
 	snippetsFile, err := s.LoadSnippets()
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func (s *Service) UpdateSnippet(name, description, command string, tags []string
 		return fmt.Errorf("snippet '%s' not found", name)
 	}
 
-	snippet.Update(description, command, tags)
+	snippet.Update(description, command, language, tags)
 	snippetsFile.Snippets[name] = snippet
 
 	return s.SaveSnippets(snippetsFile)
