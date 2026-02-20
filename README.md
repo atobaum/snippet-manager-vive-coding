@@ -1,5 +1,8 @@
 # README: Snippet Management Tool "sni"
 
+> [!NOTE]
+> This repository is deprecated and moved to [Snipgo](https://github.com/atobaum/snipgo) project.
+
 ## 1. 목적 (Purpose) 🎯
 
 `sni`는 개발자의 파편화된 코드 조각, 명령어, 설정 파일 등을 **중앙에서 관리**하고, **가장 익숙한 환경인 터미널(CLI)과 브라우저(Web UI)**를 통해 빠르고 쉽게 접근할 수 있도록 돕는 도구입니다. 이를 통해 컨텍스트 전환 비용을 줄이고 개발 생산성을 극대화하는 것을 목표로 합니다.
